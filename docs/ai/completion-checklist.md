@@ -15,6 +15,7 @@ AI(Claude Code·Codex 등)가 구현이나 PR 작성에 관여한 PR은 **그 AI
 - [ ] API·정책·스키마가 바뀌었으면 관련 문서(SA 등)를 함께 갱신했다.
 - [ ] 커밋 메시지가 팀 컨벤션(`docs/collaboration/github-rules.md`)을 따른다.
 - [ ] PR 본문에 팀 템플릿의 AI 사용 내역 표를 작성했다.
+- [ ] 관련 이슈를 `Closes #이슈번호`로 연결했다 (없으면 생략 사유를 비고에 적었다).
 - [ ] 새로 발견한 반복 실수가 있으면 [반복 실수 기록](agent-mistakes.md)에 남겼다.
 - [ ] 하네스 문서(AGENTS·docs/ai·docs/testing)를 바꿨으면 `python scripts/harness_check.py`를 실행해 PASS를 확인했다. (로컬에 Python이 없으면 PR의 Harness Check CI 결과로 대신한다)
 
