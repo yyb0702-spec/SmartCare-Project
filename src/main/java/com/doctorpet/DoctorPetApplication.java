@@ -1,13 +1,13 @@
-package com.example.smartcareproject;
+package com.doctorpet;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class SmartCareProjectApplication {
+public class DoctorPetApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(SmartCareProjectApplication.class, args);
+        SpringApplication.run(DoctorPetApplication.class, args);
     }
 
 }

@@ -1,6 +1,6 @@
-package com.example.smartcareproject.global.exception;
+package com.doctorpet.global.exception;
 
-import com.example.smartcareproject.global.response.ApiResponse;
+import com.doctorpet.global.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;

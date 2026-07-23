@@ -1,6 +1,6 @@
-package com.example.smartcareproject.global.response;
+package com.doctorpet.global.response;
 
-import com.example.smartcareproject.global.exception.ErrorCode;
+import com.doctorpet.global.exception.ErrorCode;
 
 public record ApiResponse<T>(
         String code,

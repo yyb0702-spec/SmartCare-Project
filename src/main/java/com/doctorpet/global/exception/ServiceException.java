@@ -1,4 +1,4 @@
-package com.example.smartcareproject.global.exception;
+package com.doctorpet.global.exception;
 
 import lombok.Getter;
 
