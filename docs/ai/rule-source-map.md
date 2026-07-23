@@ -16,6 +16,7 @@
 | Dev 구현 경계·범위 제한 | `docs/ai/implementation-guardrails.md` | Review Gate |
 | PR 전 완료 점검 | `docs/ai/completion-checklist.md` | PR 작성 절차 |
 | 반복 실수와 재발 방지 | `docs/ai/agent-mistakes.md` | 다음 작업의 계획 단계 |
+| AI 산출물 품질 기준(슬롭 패턴) | `docs/ai/remove-ai-slop.md` | Review Gate 산출물 품질 항목 |
 | 하네스 무결성 검사(링크·경로·섹션) | `scripts/harness_check.py` | Harness Check CI, 완료 체크리스트. PRD·SA 헤더는 `N-M. 제목` 마침표 형식을 유지해야 인식된다 |
 | 작업 보드 Status 자동화 | `.github/workflows/project-status.yml` | PR 템플릿의 `Closes #` 안내. 보드 컬럼명 변경 시 이 워크플로도 수정 |
 

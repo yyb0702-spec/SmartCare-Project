@@ -28,6 +28,7 @@ HARNESS_DOCS = [
     "docs/ai/implementation-guardrails.md",
     "docs/ai/completion-checklist.md",
     "docs/ai/agent-mistakes.md",
+    "docs/ai/remove-ai-slop.md",
     "docs/testing/verification-guide.md",
     ".github/ISSUE_TEMPLATE/feature.md",
 ]

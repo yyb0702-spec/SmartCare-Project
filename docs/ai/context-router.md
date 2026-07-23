@@ -81,7 +81,7 @@
 ### 코드 리뷰
 
 - 필수: [Review Gate](review-gate.md), [구현 가드레일](implementation-guardrails.md), [검증 가이드](../testing/verification-guide.md), [반복 실수](agent-mistakes.md)
-- 조건부: 코드 스타일이 지적의 직접 근거이면 [코드컨벤션](../architecture/DoctorPet-코드컨벤션.md)을 추가한다.
+- 조건부: 코드 스타일이 지적의 직접 근거이면 [코드컨벤션](../architecture/DoctorPet-코드컨벤션.md)을, AI 산출물 품질이 쟁점이면 [AI 슬롭 제거](remove-ai-slop.md)를 추가한다.
 - 제외: 변경과 무관한 도메인 문서 전체는 읽지 않는다.
 
 ### 테스트 작성·검증
