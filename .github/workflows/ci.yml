@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    # 문서 전용 PR은 CI 스킵 (Harness Check 워크플로가 담당)
+    # 주의: 이 워크플로를 required check로 지정하면 스킵된 PR이 merge 블록된다 — 그때는 이 필터를 제거할 것
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Level 3(DB·동시성) 통합 테스트용 인프라 — 테스트 프로필은 localhost:3306/6379 기준
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: doctorpet
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+          --health-start-period=30s
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run tests
+        run: ./gradlew clean test
+      - name: Build
+        run: ./gradlew build -x test
