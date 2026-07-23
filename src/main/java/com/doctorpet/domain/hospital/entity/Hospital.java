@@ -65,7 +65,7 @@ public class Hospital {
     @Column(name = "partnership_status", nullable = false)
     private PartnershipStatus partnershipStatus;
 
-    public Hospital(
+    private Hospital(
             String mgmtNo,
             String localGovCode,
             String name,
@@ -77,6 +77,7 @@ public class Hospital {
             BigDecimal cordY,
             LocalDate licenseDate,
             BusinessStatus businessStatus,
+            LocalDate closeDate,
             BigDecimal area,
             PartnershipStatus partnershipStatus
     ) {
@@ -91,8 +92,48 @@ public class Hospital {
         this.cordY = cordY;
         this.licenseDate = licenseDate;
         this.businessStatus = businessStatus;
+        this.closeDate = closeDate;
         this.area = area;
         this.partnershipStatus = partnershipStatus;
+    }
+
+    public static Hospital create(
+            String mgmtNo,
+            String localGovCode,
+            String name,
+            String phone,
+            String addressJibun,
+            String addressRoad,
+            String zipcode,
+            BigDecimal cordX,
+            BigDecimal cordY,
+            LocalDate licenseDate,
+            BusinessStatus businessStatus,
+            LocalDate closeDate,
+            BigDecimal area,
+            PartnershipStatus partnershipStatus
+    ) {
+        return new Hospital(
+                mgmtNo,
+                localGovCode,
+                name,
+                phone,
+                addressJibun,
+                addressRoad,
+                zipcode,
+                cordX,
+                cordY,
+                licenseDate,
+                businessStatus,
+                closeDate,
+                area,
+                partnershipStatus
+        );
+    }
+
+    // 공공 데이터 최종 업데이트 날짜 기록
+    public void updateSourceModifiedAt(LocalDateTime sourceModifiedAt) {
+        this.sourceModifiedAt = sourceModifiedAt;
     }
 
 }
