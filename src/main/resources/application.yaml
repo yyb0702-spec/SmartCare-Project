@@ -1,3 +1,17 @@
 spring:
   application:
     name: SmartCareProject
+  profiles:
+    active: local
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    org.hibernate.SQL: debug
