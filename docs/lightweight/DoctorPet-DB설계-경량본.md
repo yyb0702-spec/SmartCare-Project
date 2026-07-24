@@ -200,4 +200,3 @@ members 1 ── 0..N notifications
 - `reservation_slots.version`은 낙관적 락에 사용한다.
 - 노쇼 처리 시 슬롯 상태는 `RESERVED`를 유지한다.
 - 오프라인 정산은 결제 상태가 `OFFLINE_REQUIRED`일 때만 수행한다.
-
