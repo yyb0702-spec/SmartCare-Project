@@ -17,7 +17,8 @@ on:
   pull_request:
     types: [opened, edited, reopened, ready_for_review, converted_to_draft, closed]
   pull_request_review:
-    types: [submitted]
+    # dismissed도 구독한다 — 변경 요청이 dismiss되면 reviewDecision이 바뀌므로 재계산이 필요하다
+    types: [submitted, dismissed]
 
 permissions:
   contents: read
