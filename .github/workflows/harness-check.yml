@@ -12,6 +12,8 @@ on:
       - "docs/**"
       - "scripts/harness_check.py"
       - ".github/ISSUE_TEMPLATE/**"
+      - ".github/workflows/harness-check.yml"
+      - ".github/pull_request_template.md"
   workflow_dispatch:
 
 permissions:

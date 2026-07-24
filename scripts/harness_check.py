@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """DoctorPet 하네스 무결성 검사.
 
-검사 범위 (의도적으로 3가지로 제한한다 — 검사기가 장애물이 되지 않게):
+검사 범위 (의도적으로 4가지로 제한한다 — 검사기가 장애물이 되지 않게):
   1. 하네스 문서의 마크다운 상대 링크가 실제 파일을 가리키는가
   2. rule-source-map.md 표의 정본 경로가 실존하는가
   3. `PRD §X-Y` / `SA §X-Y` / `SA 부록 A·B` 참조가 실제 문서 헤더에 존재하는가
      (하네스 문서뿐 아니라 PRD·SA가 서로를 가리키는 상호 참조도 검사한다)
+  4. PR 템플릿(.github/pull_request_template.md)이 github-rules.md의
+     "### PR 템플릿" 코드블록과 일치하는가 (정본-사본 동기)
 
 사용: python scripts/harness_check.py   (성공 시 exit 0, 결함 발견 시 exit 1)
 """
@@ -148,6 +150,20 @@ def main() -> int:
     for doc in (PRD, SA):
         rel = doc.relative_to(ROOT).as_posix()
         check_section_refs(rel, load(doc), prd_headers, sa_headers, errors)
+
+    # 4. PR 템플릿 ↔ github-rules 코드블록 동기 (정본-사본 diff 0)
+    tpl = ROOT / ".github/pull_request_template.md"
+    rules = ROOT / "docs/collaboration/github-rules.md"
+    if not tpl.exists():
+        errors.append(".github/pull_request_template.md: 파일이 없다")
+    elif not rules.exists():
+        errors.append("docs/collaboration/github-rules.md: 파일이 없다")
+    else:
+        m = re.search(r"### PR 템플릿\n\n```markdown\n(.*?)\n```", load(rules), re.DOTALL)
+        if not m:
+            errors.append("github-rules.md: '### PR 템플릿' 코드블록을 찾을 수 없다")
+        elif m.group(1).strip("\n") != load(tpl).strip("\n"):
+            errors.append("PR 템플릿과 github-rules.md 코드블록이 다르다 — 한쪽 수정 시 함께 동기화 필요")
 
     if errors:
         print(f"FAIL — {len(errors)}건")

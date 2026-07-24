@@ -2,9 +2,10 @@ name: Project status automation
 
 # PR 이벤트에 따라 "DoctorPet 개발 작업 보드"(yyb0702-spec/projects/3)의
 # 연결 이슈 Status를 자동으로 옮긴다.
-#   PR 열림·리뷰 준비    → In review
-#   Draft 전환·변경 요청 → In progress
-#   merge               → Done
+#   merge → Done / Draft → In progress
+#   그 외(열림·본문 수정·리뷰 제출)는 집계된 reviewDecision 기준:
+#   미해결 변경 요청 있으면 In progress, 없으면 In review
+#   (개별 승인이 다른 리뷰어의 변경 요청을 덮어쓰지 않게 — PR #54 리뷰 반영)
 # 전제:
 #   1. PR 본문에 Closes #이슈번호 (또는 Fixes/Resolves) 형식으로 이슈 연결
 #   2. 저장소 시크릿 PROJECT_TOKEN — 소유자가 project 권한 포함 PAT를 등록해야 함
@@ -14,7 +15,7 @@ name: Project status automation
 
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review, converted_to_draft, closed]
+    types: [opened, edited, reopened, ready_for_review, converted_to_draft, closed]
   pull_request_review:
     types: [submitted]
 
@@ -45,6 +46,13 @@ jobs:
               return;
             }
 
+            // 본문 외 수정(제목 등)의 edited는 소음이므로 스킵
+            if (context.eventName === 'pull_request' && context.payload.action === 'edited'
+                && !context.payload.changes?.body) {
+              core.info('PR edit did not change body; skipping.');
+              return;
+            }
+
             const body = pr.body || '';
             const issueNumbers = new Set();
             const closingKeywordPattern = /\b(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s*:?\s+#\s*(\d+)\b/gi;
@@ -60,24 +68,34 @@ jobs:
             }
 
             let targetStatus = null;
+            const action = context.payload.action;
 
-            if (context.eventName === 'pull_request_review') {
-              const reviewState = context.payload.review?.state;
-              if (reviewState === 'changes_requested') {
-                targetStatus = 'In progress';
-              } else if (reviewState === 'approved') {
-                targetStatus = 'In review';
-              }
-            } else if (context.eventName === 'pull_request') {
-              const action = context.payload.action;
-              if (action === 'closed') {
-                targetStatus = pr.merged ? 'Done' : null;
-              } else if (action === 'converted_to_draft') {
-                targetStatus = 'In progress';
-              } else {
-                // Draft로 처음 열린(opened/reopened) PR은 리뷰 대기가 아니라 작업 중
-                targetStatus = pr.draft ? 'In progress' : 'In review';
-              }
+            if (context.eventName === 'pull_request' && action === 'closed') {
+              targetStatus = pr.merged ? 'Done' : null;
+            } else if (context.eventName === 'pull_request' && action === 'converted_to_draft') {
+              targetStatus = 'In progress';
+            } else if (pr.draft) {
+              // Draft 상태의 모든 이벤트는 작업 중
+              targetStatus = 'In progress';
+            } else {
+              // 열림·본문 수정·리뷰 제출: 개별 이벤트가 아니라 GitHub이 집계한
+              // reviewDecision으로 판단 — 리뷰어 A의 변경 요청이 미해결이면
+              // 리뷰어 B가 승인해도 In progress를 유지한다.
+              const decisionData = await github.graphql(`
+                query($owner: String!, $repo: String!, $number: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    pullRequest(number: $number) {
+                      reviewDecision
+                    }
+                  }
+                }
+              `, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                number: pr.number,
+              });
+              const decision = decisionData.repository?.pullRequest?.reviewDecision;
+              targetStatus = decision === 'CHANGES_REQUESTED' ? 'In progress' : 'In review';
             }
 
             if (!targetStatus) {
