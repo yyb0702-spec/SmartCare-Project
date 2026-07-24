@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """DoctorPet 하네스 무결성 검사.
 
-검사 범위 (의도적으로 4가지로 제한한다 — 검사기가 장애물이 되지 않게):
-  1. 하네스 문서의 마크다운 상대 링크가 실제 파일을 가리키는가
+검사 범위 (의도적으로 5가지로 제한한다 — 검사기가 장애물이 되지 않게):
+  1. 하네스·경량 문서의 마크다운 상대 링크가 실제 파일을 가리키는가
   2. rule-source-map.md 표의 정본 경로가 실존하는가
   3. `PRD §X-Y` / `SA §X-Y` / `SA 부록 A·B` 참조가 실제 문서 헤더에 존재하는가
      (하네스 문서뿐 아니라 PRD·SA가 서로를 가리키는 상호 참조도 검사한다)
   4. PR 템플릿(.github/pull_request_template.md)이 github-rules.md의
      "### PR 템플릿" 코드블록과 일치하는가 (정본-사본 동기)
+  5. 경량본의 정본 경로·버전 표기가 현재 정본과 일치하는가
 
 사용: python scripts/harness_check.py   (성공 시 exit 0, 결함 발견 시 exit 1)
 """
@@ -35,8 +36,20 @@ HARNESS_DOCS = [
     ".github/ISSUE_TEMPLATE/feature.md",
 ]
 
+LIGHTWEIGHT_DIR = ROOT / "docs/lightweight"
+LIGHTWEIGHT_DOCS = sorted(
+    path.relative_to(ROOT).as_posix()
+    for path in LIGHTWEIGHT_DIR.glob("*.md")
+)
+LIGHTWEIGHT_SUMMARIES = [
+    rel for rel in LIGHTWEIGHT_DOCS
+    if rel != "docs/lightweight/README.md"
+]
+
 PRD = ROOT / "docs/product/DoctorPet-PRD.md"
 SA = ROOT / "docs/architecture/DoctorPet-SA.md"
+CODE_CONVENTION = ROOT / "docs/architecture/DoctorPet-코드컨벤션.md"
+POLICY = ROOT / "docs/domain/반려동물병원예약-정책정리본.md"
 
 MD_LINK = re.compile(r"\[[^\]]*\]\(([^)#\s]+)(?:#[^)]*)?\)")
 BACKTICK_PATH = re.compile(r"`((?:docs|scripts|\.github)/[^`\s]+\.(?:md|py|yml))`")
@@ -62,6 +75,66 @@ def headers_of(path: Path) -> set[str]:
         if m:
             nums.add(m.group(1))
     return nums
+
+
+def version_of(path: Path, pattern: str, label: str,
+               errors: list[str]) -> str | None:
+    """정본 헤더에서 버전을 읽는다."""
+    if not path.exists():
+        errors.append(f"{path.relative_to(ROOT).as_posix()}: 파일이 없다")
+        return None
+    match = re.search(pattern, load(path))
+    if not match:
+        errors.append(
+            f"{path.relative_to(ROOT).as_posix()}: {label} 버전을 찾을 수 없다"
+        )
+        return None
+    return match.group(1)
+
+
+def check_lightweight_canonical_refs(errors: list[str]) -> None:
+    """경량본의 정본 경로·버전 표기가 실제 정본과 일치하는지 검사한다."""
+    versions = {
+        "제품 요구사항": (
+            "docs/product/DoctorPet-PRD.md",
+            version_of(
+                PRD, r"\| 문서 버전 \| (v[\d.]+) \|", "PRD", errors
+            ),
+        ),
+        "시스템 설계·ERD·API·상태 머신": (
+            "docs/architecture/DoctorPet-SA.md",
+            version_of(
+                SA, r"\| 문서 버전 \| (v[\d.]+) \|", "SA", errors
+            ),
+        ),
+        "코드 컨벤션": (
+            "docs/architecture/DoctorPet-코드컨벤션.md",
+            version_of(
+                CODE_CONVENTION,
+                r"\| 문서 버전 \| (v[\d.]+) \|",
+                "코드 컨벤션",
+                errors,
+            ),
+        ),
+        "정책 원본": (
+            "docs/domain/반려동물병원예약-정책정리본.md",
+            version_of(
+                POLICY, r"상태:\s*개정판 \((v[\d.]+)\)", "정책", errors
+            ),
+        ),
+    }
+
+    for rel in LIGHTWEIGHT_SUMMARIES:
+        text = load(ROOT / rel)
+        for label, (path, version) in versions.items():
+            if version is None:
+                continue
+            expected = f"| {label} | `{path}` {version}"
+            if expected not in text:
+                errors.append(
+                    f"{rel}: 정본 참조 불일치 → "
+                    f"{label}은 `{path}` {version}이어야 한다"
+                )
 
 
 def expand_range(ref: str) -> list[str] | None:
@@ -121,7 +194,7 @@ def main() -> int:
     prd_headers = headers_of(PRD)
     sa_headers = headers_of(SA)
 
-    for rel in HARNESS_DOCS:
+    for rel in HARNESS_DOCS + LIGHTWEIGHT_DOCS:
         doc = ROOT / rel
         if not doc.exists():
             errors.append(f"{rel}: 파일이 없다")
@@ -165,12 +238,22 @@ def main() -> int:
         elif m.group(1).strip("\n") != load(tpl).strip("\n"):
             errors.append("PR 템플릿과 github-rules.md 코드블록이 다르다 — 한쪽 수정 시 함께 동기화 필요")
 
+    # 5. 경량본 ↔ 정본 경로·버전 동기
+    if not LIGHTWEIGHT_DOCS:
+        errors.append("docs/lightweight: 검사할 Markdown 문서가 없다")
+    else:
+        check_lightweight_canonical_refs(errors)
+
     if errors:
         print(f"FAIL — {len(errors)}건")
         for e in errors:
             print(f"  - {e}")
         return 1
-    print(f"PASS — 하네스 문서 {len(HARNESS_DOCS)}개 + PRD·SA 상호참조, 링크·경로·섹션 참조 이상 없음")
+    print(
+        f"PASS — 하네스 문서 {len(HARNESS_DOCS)}개·경량 문서 "
+        f"{len(LIGHTWEIGHT_DOCS)}개 + PRD·SA 상호참조, "
+        "링크·경로·섹션·정본 버전 참조 이상 없음"
+    )
     return 0
 
 

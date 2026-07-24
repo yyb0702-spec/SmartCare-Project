@@ -3,13 +3,13 @@
 | 항목 | 내용 |
 | --- | --- |
 | 제품명 | DoctorPet |
-| 문서 버전 | v1.7 |
-| 작성 기준일 | 2026-07-23 |
+| 문서 버전 | v1.8 |
+| 작성 기준일 | 2026-07-24 |
 | 상위 근거 | PRD, 정책 정리본, 코드 컨벤션 (버전은 각 문서 헤더 참조) |
 
 PRD가 정의한 요구사항을 구현 가능한 설계로 확정한다(ERD·API·상태 머신·핵심 기능·인프라). PRD와 충돌하면 PRD를 따른다. 코드 스타일·클래스 규약은 코드 컨벤션 문서를 따른다. 아직 안 정한 선택지는 본문에 `[결정 필요]`로 표기하고 부록 A에 모은다.
 
-> 변경 이력 — v1.4: 환불 MVP 제외, 결제 멱등키(`merchant_payment_id`), `PAYMENT_COMPLETED` 제거(조합 표시), 이력 방식 B 등 리뷰 반영. v1.5~v1.6: 미확정 13건 확정(낙관적 락 실채택, Redis 캐시, 재시도 3회, 상한 300만원, 이메일 익명화, 슬롯 14일치 등 — 부록 A 참조) + 표현 경량화(사실관계 변경 없음). v1.7: 예약 상태 전이 조건부 UPDATE 보호 규칙 추가(§5), 부록 A에 탈퇴 시 활성 예약·미수금 처리 미확정 등재(하네스 2차 감사 반영).
+> 변경 이력 — v1.4: 환불 MVP 제외, 결제 멱등키(`merchant_payment_id`), `PAYMENT_COMPLETED` 제거(조합 표시), 이력 방식 B 등 리뷰 반영. v1.5~v1.6: 미확정 13건 확정(낙관적 락 실채택, Redis 캐시, 재시도 3회, 상한 300만원, 이메일 익명화, 슬롯 14일치 등 — 부록 A 참조) + 표현 경량화(사실관계 변경 없음). v1.7: 예약 상태 전이 조건부 UPDATE 보호 규칙 추가(§5), 부록 A에 탈퇴 시 활성 예약·미수금 처리 미확정 등재(하네스 2차 감사 반영). v1.8: 병원 매핑 복합 키, 슬롯-예약 1:N, AI 구조화 출력 5필드 저장을 확정하고 검색 Tool 실패 응답 주체의 문서 충돌을 미확정으로 등재.
 
 ---
 
@@ -91,7 +91,7 @@ erDiagram
     HOSPITAL ||--o{ HOSPITAL_CAPABILITY : has
     HOSPITAL ||--o{ RESERVATION_SLOT : offers
     HOSPITAL ||--o{ RESERVATION : receives
-    RESERVATION_SLOT ||--o| RESERVATION : occupied_by
+    RESERVATION_SLOT ||--o{ RESERVATION : used_by
     PET_PROFILE ||--o{ RESERVATION : for
     PAYMENT_METHOD ||--o{ RESERVATION : selected_by
     RESERVATION ||--o| PAYMENT : billed_by
@@ -138,7 +138,7 @@ erDiagram
 | 컬럼 | 타입 | 설명 |
 | --- | --- | --- |
 | id | BIGINT PK | |
-| mgmt_no | VARCHAR UNIQUE | 관리번호(공공데이터 조인 키) |
+| mgmt_no | VARCHAR | 관리번호(공공데이터 조인 키) |
 | local_gov_code | VARCHAR | 지자체 코드 |
 | name | VARCHAR | 병원명 |
 | phone | VARCHAR | 전화번호 |
@@ -155,6 +155,7 @@ erDiagram
 | partnership_status | VARCHAR | PARTNER / NON_PARTNER |
 
 인덱스: `(business_status)`, `(coord_x, coord_y)` — 영업상태 필터·거리 계산용.
+제약: `UNIQUE(local_gov_code, mgmt_no)` — 지자체 범위의 관리번호를 공공데이터·제휴 데이터 복합 매핑 키로 사용한다.
 
 ### hospital_details (제휴 병원만, 자체 보강)
 
@@ -212,6 +213,8 @@ erDiagram
 | no_show_at | DATETIME NULL | |
 
 인덱스: `(slot_id)`, `(member_id, status)`, `(hospital_id, status)`.
+
+하나의 슬롯은 거절·취소·승인 타임아웃으로 반환된 뒤 다시 예약될 수 있으므로 예약 이력과는 1:N 관계다. 단, 같은 시점에 활성 예약은 1건만 허용한다. 예약 요청 트랜잭션에서 `reservation_slots.version` 낙관적 락으로 `OPEN → RESERVED` 점유를 원자적으로 처리하며, 충돌한 요청은 실패시킨다(§9-3).
 
 ### reservation_events (append-only, 방식 B)
 
@@ -271,8 +274,9 @@ erDiagram
 | id | BIGINT PK | |
 | member_id | BIGINT FK NULL | 비로그인 임시 상담 시 NULL |
 | symptom_text | TEXT | 입력 증상. 보존 30일 + 패턴 마스킹(전화·이메일·주민번호 등 정규식 마스킹). 30일 경과 건 배치 삭제 |
-| required_capabilities | JSON | AI 도출 역량 |
-| urgency_level | VARCHAR | LOW / MODERATE / HIGH |
+| structured_result | JSON | AI 구조화 출력 5필드(`possibleFocusAreas`, `requiredCapabilities`, `urgencyLevel`, `preVisitCheckpoints`, `recommendVetVisit`) 전체 |
+| required_capabilities | JSON | AI 도출 역량. 검색·조회 편의를 위해 `structured_result`와 중복 저장 |
+| urgency_level | VARCHAR | LOW / MODERATE / HIGH. 조회·집계 편의를 위해 `structured_result`와 중복 저장 |
 | model | VARCHAR | 사용 모델 |
 | prompt_version | VARCHAR | 프롬프트 버전 |
 | prompt_tokens | INT | 입력 토큰 |
@@ -285,7 +289,7 @@ erDiagram
 | schema_parse_success | BOOLEAN | 구조화 출력 파싱 성공 |
 | created_at | DATETIME | |
 
-이 필드들로 AI 필수 요건(구조화 출력·Tool Calling·장애 격리)과 비용·품질을 수치로 검증한다. 원문(`symptom_text`)만 30일 후 삭제하고, 나머지 구조화 지표 필드는 개인정보가 아니므로 더 길게(프로젝트 기간 내) 보관해 분석에 쓴다. 입력 길이 제한·Rate Limit 수치는 `[결정 필요]`.
+`structured_result`에는 AI 구조화 출력 5필드 원본을 그대로 저장한다. `required_capabilities`와 `urgency_level`은 검색·조회·집계 편의를 위한 중복 저장 컬럼이며 같은 트랜잭션에서 일관되게 기록한다. 이 필드들로 AI 필수 요건(구조화 출력·Tool Calling·장애 격리)과 비용·품질을 수치로 검증한다. 원문(`symptom_text`)만 30일 후 삭제하고, 나머지 구조화 지표 필드는 개인정보가 아니므로 더 길게(프로젝트 기간 내) 보관해 분석에 쓴다. 입력 길이 제한·Rate Limit 수치는 `[결정 필요]`.
 
 ### notifications
 
@@ -468,6 +472,8 @@ Base Path는 `/api`, 병원 운영 API는 `/api/hospital/**`. 모든 응답은 `
 - `disclaimer`는 LLM 출력이 아니라 서버가 응답 조립 시 고정 문구로 주입한다(누락 불가).
 - AI 장애 시 `structured` 없이 `fallback=true` + 직접 검색 유도.
 
+> **[결정 필요 — 문서 충돌]** 검색 Tool 호출 실패 시 안내 응답의 생성 주체가 정본 간 일치하지 않는다. PRD §5-4·정책 §3.9는 실패 컨텍스트를 LLM에 전달해 안내 문구를 생성하고, 이 문서의 장애 격리 설계(§9-5)는 `fallback=true`로 사용자 직접 검색을 유도한다. LLM 재호출 여부와 서버 고정 문구 사용 여부는 팀 합의 후 PRD·정책·SA를 함께 수정한다. 결정 전에는 해당 실패 응답 방식을 구현하지 않는다.
+
 ### 8-5. 예약 (보호자)
 
 | 명칭 | Method | Path | 권한 |
@@ -569,11 +575,11 @@ Base Path는 `/api`, 병원 운영 API는 `/api/hospital/**`. 모든 응답은 `
 
 환각 방어: disclaimer 서버 주입, 응급 키워드 고정 응답 라우팅, 화이트리스트 카테고리, 질환명·처치 생성 차단, 조회 안 된 병원·데이터 생성 차단. 장애 격리: 타임아웃·5xx·Rate Limit 시 Circuit Breaker → 사용자 직접 검색으로 대체하고 예약·결제에 영향을 주지 않는다.
 
-운영·비용 측정: 매 호출을 `ai_consultations`에 model·프롬프트 버전·토큰·지연·status·errorType·fallback·toolCall·스키마 파싱 성공으로 기록해 AI 필수 요건·비용·품질을 수치로 검증한다. 공개 AI API의 입력 길이 제한·Rate Limit·증상 원문 마스킹·보존기간은 별도 정한다(`[결정 필요]`). 파라미터는 temperature 0.2~0.3, max_tokens 약 500, 프롬프트는 종별·증상 카테고리별로 최소 2개 분기. `AiGateway` 인터페이스만 먼저 확정하고 모델/제공자 구현체·프롬프트 외부화는 AI 착수 시점에 정한다(관측 필드는 제공자와 무관하게 유효).
+운영·비용 측정: 매 호출을 `ai_consultations`에 model·프롬프트 버전·토큰·지연·status·errorType·fallback·toolCall·스키마 파싱 성공으로 기록해 AI 필수 요건·비용·품질을 수치로 검증한다. 공개 AI API의 입력 길이 제한·Rate Limit 구체 수치는 별도 정한다(`[결정 필요]`). 증상 원문은 전화번호·이메일·주민번호 등을 패턴 마스킹한 뒤 30일간 보존하고, 30일 경과 건은 배치 삭제한다(§4). 파라미터는 temperature 0.2~0.3, max_tokens 약 500, 프롬프트는 종별·증상 카테고리별로 최소 2개 분기. `AiGateway` 인터페이스만 먼저 확정하고 모델/제공자 구현체·프롬프트 외부화는 AI 착수 시점에 정한다(관측 필드는 제공자와 무관하게 유효).
 
 ## 9-6. 공공데이터 배치 적재·2계층 매핑
 
-스케줄러가 공공데이터를 수집해 `hospitals`에 적재·갱신한다. 조인 키는 `mgmt_no`. 제휴 매핑은 더미 제휴 데이터를 `mgmt_no`로 조인해 `partnership_status=PARTNER`로 표시하고 `hospital_details`·`hospital_capabilities`를 보강한다. 비제휴는 원본만 유지(`NON_PARTNER`)해 참고용으로 노출하고 예약은 막는다. 범위는 전국 통합 조회(localdata.go.kr) 가능 여부와 무관하게 특정 지자체(서울 등 1~2곳)로 좁혀 시작하고, MVP는 1회 시드 적재로 충분하다. 주기 갱신 배치는 확장에서 도입한다. API 인증키 발급 소요는 착수 전 1주차에 확인한다.
+스케줄러가 공공데이터를 수집해 `hospitals`에 적재·갱신한다. 조인 키는 `local_gov_code + mgmt_no`. 제휴 매핑은 더미 제휴 데이터를 같은 복합 키로 조인해 `partnership_status=PARTNER`로 표시하고 `hospital_details`·`hospital_capabilities`를 보강한다. 비제휴는 원본만 유지(`NON_PARTNER`)해 참고용으로 노출하고 예약은 막는다. 범위는 전국 통합 조회(localdata.go.kr) 가능 여부와 무관하게 특정 지자체(서울 등 1~2곳)로 좁혀 시작하고, MVP는 1회 시드 적재로 충분하다. 주기 갱신 배치는 확장에서 도입한다. API 인증키 발급 소요는 착수 전 1주차에 확인한다.
 
 ## 9-7. 스케줄러
 
@@ -712,6 +718,7 @@ sequenceDiagram
 | 3 | AI 입력 길이 제한·Rate Limit 구체 수치 | §9-5, §11 |
 | 4 | 실시간 push 방식(SSE / WebSocket+STOMP) — 채팅 도입 여부에 따라 재논의 | §2, §9-8 |
 | 5 | 탈퇴 시 활성 예약(CONFIRMED·CHECKED_IN)·미수금(OFFLINE_REQUIRED) 보유 회원 처리 — 탈퇴 보류 vs 종결 후 익명화 | §6-3, §9-4 |
+| 6 | 검색 Tool 호출 실패 응답 주체 — 실패 컨텍스트를 LLM에 전달해 안내 생성 vs 서버가 `fallback=true`와 고정 문구로 직접 검색 유도 | PRD §5-4, 정책 §3.9, §8-4, §9-5 |
 
 ---
 
